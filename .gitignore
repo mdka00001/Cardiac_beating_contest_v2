@@ -1,0 +1,15 @@
+#ignore all movie files and log files
+.log
+*.mp4
+*.png
+*.zip
+*.avi
+*.tif
+*.tiff
+*.csv
+
+#ignore directories
+/CM Movie MP4
+/outputs
+
+
