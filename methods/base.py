@@ -160,7 +160,8 @@ class CardiacBeatingBase:
         smoothed_data = gaussian_filter1d(np.mean(cluster_1_data, axis=0), sigma=2)
 
         time_axis = np.linspace(0, len(smoothed_data) / frame_rate, len(smoothed_data))
-        peaks, properties = find_peaks(smoothed_data, prominence=0.1, distance= 4)
+        min_RR_index = 1 /(360 / 60) * frame_rate
+        peaks, properties = find_peaks(smoothed_data, prominence=0.1, distance= min_RR_index)
 
         plt.plot(time_axis, smoothed_data, color='g', label='Mean Intensity')
         plt.plot(time_axis[peaks], smoothed_data[peaks], 'x')
