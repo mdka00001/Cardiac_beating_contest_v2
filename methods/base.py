@@ -4,7 +4,8 @@ import cv2
 from sklearn.mixture import GaussianMixture
 from scipy.ndimage import gaussian_filter1d
 import matplotlib.pyplot as plt
-from scipy.signal import find_peaks as find_peaks
+from scipy.signal import find_peaks, savgol_filter
+from sklearn.preprocessing import minmax_scale
 
 class CardiacBeatingBase:
 
@@ -67,7 +68,7 @@ class CardiacBeatingBase:
 
         # Process each pair of frames
         for i in range(1, len(frames)):
-            prev_frame = cv2.cvtColor(frames[i-1], cv2.COLOR_BGR2GRAY)
+            prev_frame = cv2.cvtColor(frames[0], cv2.COLOR_BGR2GRAY)
             curr_frame = cv2.cvtColor(frames[i], cv2.COLOR_BGR2GRAY)
 
             
@@ -157,22 +158,46 @@ class CardiacBeatingBase:
         
     def get_relative_displacement_graph(cluster_1_data, frame_rate, image_file_name):
 
-        smoothed_data = gaussian_filter1d(np.mean(cluster_1_data, axis=0), sigma=2)
+        #smoothed_data = gaussian_filter1d(minmax_scale(np.mean(cluster_1_data, axis=0)), sigma=2)
 
-        time_axis = np.linspace(0, len(smoothed_data) / frame_rate, len(smoothed_data))
+        
+
+        smoothed_intensity = savgol_filter(minmax_scale(np.mean(cluster_1_data, axis=0)), window_length=25, polyorder=3)
+
+        time_axis = np.linspace(0, len(smoothed_intensity) / frame_rate, len(smoothed_intensity))
         min_RR_index = 1 /(360 / 60) * frame_rate
-        peaks, properties = find_peaks(smoothed_data, prominence=0.1, distance= min_RR_index)
 
-        plt.plot(time_axis, smoothed_data, color='g', label='Mean Intensity')
-        plt.plot(time_axis[peaks], smoothed_data[peaks], 'x')
-        plt.title('Green Pixel Intensity Over Time')
-        plt.xlabel('Time (s)')
-        plt.ylabel('Mean Intensity')
-        plt.legend()
-        plt.savefig(fr"{image_file_name}_waveplot.png")
+        # linear spaced vector between 0.5 pi and 1.5 pi 
+        v = np.linspace(0.5 * np.pi, 1.5 * np.pi, 15)
+
+        # create sine filter for approximating QRS feature
+        peak_filter = np.sin(v)
+
+        # compute cross correlation between ecg and the sine filter
+        ecg_transformed = np.correlate(smoothed_intensity, peak_filter, mode="same")
+
+        # Calculate the 5th and 95th percentiles
+        low_percentile = np.percentile(ecg_transformed, 5)
+        high_percentile = np.percentile(ecg_transformed, 95)
+
+        # Set the prominence as the difference between these percentiles
+        prominence_threshold = high_percentile - low_percentile
+
+
+
+        peaks, properties = find_peaks(ecg_transformed, prominence=prominence_threshold, distance= min_RR_index)
+
+        plt.figure(figsize=(20,8))
+        plt.title('ECG signal - 1000 Hz')
+        plt.plot(time_axis, ecg_transformed[0:5000], alpha = 0.8, c='orange')
+        plt.plot(time_axis, smoothed_intensity[0:5000], alpha = 1)
+        plt.plot(time_axis[peaks], ecg_transformed[peaks], 'x')
+        plt.gca().legend(('filtered','raw signal'))
+        plt.xlabel('Time (milliseconds)')
+        plt.savefig(fr"{image_file_name}_waveplots.png")
         plt.clf()
 
-        return smoothed_data, time_axis, peaks
+        return ecg_transformed, time_axis, peaks
 
 
     def get_BPM(time_axis, peaks):
